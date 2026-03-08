@@ -5,7 +5,8 @@ from typing import List, Set
 import numpy as np
 from torch.utils.data import DataLoader, Subset
 from data import RetrievalDataset_PrecompFPandInchi
-from massspecgym.data.data_module import MassSpecDataModule
+#from massspecgym.data.data_module import MassSpecDataModule
+from ms_cp.retrieval.data_module import MassSpecDataModule
 from massspecgym.data.transforms import MolFingerprinter, SpecBinner
 
 
