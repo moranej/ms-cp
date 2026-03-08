@@ -17,17 +17,18 @@ ms-cp/
 ├── README.md
 ├── requirements.txt
 ├── environment.yml
-├── data/
+├── .gitattributes
+├── data/                  # MassSpecGym data, helper files, and generated split TSVs
 │   ├── MassSpecGym_S1.tsv
 │   └── MassSpecGym_S23.tsv
 ├── ms_cp/
-│   ├── retrieval/
+│   ├── retrieval/         # Retrieval model code (adapted from ms-mole)
 │   │   ├── data.py
 │   │   ├── data_module.py
 │   │   ├── models.py
 │   │   ├── loss.py
 │   │   └── train_retriever.py
-│   ├── mcp/
+│   ├── mcp/               # Marginal conformal prediction
 │   │   ├── main.py
 │   │   ├── config.py
 │   │   ├── dataset.py
@@ -41,8 +42,8 @@ ms-cp/
 │   │       ├── lac.py
 │   │       ├── aps.py
 │   │       └── raps.py
-│   ├── cccp/          # coming soon
-│   └── ccpnn/         # coming soon
+│   ├── cccp/              # Reserved for future use
+│   └── ccpnn/             # Reserved for future use
 ├── examples/
 │   └── run_mcp.py
 ├── checkpoints/
@@ -80,35 +81,78 @@ This repository uses two dataset files produced from `MassSpecGym.tsv`, based on
 * `data/MassSpecGym_S1.tsv` for **Scenario 1**
 * `data/MassSpecGym_S23.tsv` for **Scenarios 2 and 3**
 
-Helper files (precomputed fingerprints, InChIKeys, candidate sets) must be downloaded separately from the [MassSpecGym HuggingFace repository](https://huggingface.co/datasets/roman-bushuiev/MassSpecGym/tree/main) and placed in `data/`.
+### Helper files
+
+Helper files must be downloaded from the [MassSpecGym HuggingFace repository](https://huggingface.co/datasets/roman-bushuiev/MassSpecGym/tree/main) and placed in `data/`.
+
+The retrieval and MCP code expect the following helper files:
+
+* `fp_4096.npy`
+* `inchis.npy`
+* `MassSpecGym_retrieval_candidates_formula.json`
+* `MassSpecGym_retrieval_candidates_formula_fps.npz`
+* `MassSpecGym_retrieval_candidates_formula_inchi.npz`
 
 ---
 
-## 3. Retrieval Model
+## 3. Important Note on the Data Module
 
-Training and model code in `ms_cp/retrieval/` is adapted from [ms-mole](https://github.com/gdewael/ms-mole). Note that `data_module.py` is a modified version of the original MassSpecGym data module, updated to support four folds (`train`, `val`, `calib`, `test`) instead of three.
+Use the local four-fold data module in `ms_cp/retrieval/data_module.py`. This version supports the folds `train`, `val`, `calib`, and `test`. It should be used instead of the original MassSpecGym data module with the same class name when running code that requires an explicit calibration split.
 
-### Training
+All imports should use:
+
+```python
+from ms_cp.retrieval.data_module import MassSpecDataModule
+```
+
+---
+
+## 4. Training the Retrieval Model
+
+Training and model code in `ms_cp/retrieval/` is adapted from [ms-mole](https://github.com/gdewael/ms-mole).
+Training entry point:
 
 ```bash
 python -m ms_cp.retrieval.train_retriever \
   data/MassSpecGym_S1.tsv \
-  data/ \
+  data \
   logs/retriever_S1 \
   --rankwise_loss cross \
-  --batch_size 128 \
-  --lr 0.0001
+  --rankwise_temp 0.5 \
+  --rankwise_dropout 0.2 \
+  --rankwise_projector False \
+  --rankwise_listwise True \
+  --bonus_challenge True \
+  --bin_width 0.1 \
+  --batch_size 64 \
+  --n_layers 2 \
+  --layer_dim 512 \
+  --precision bf16-mixed
 ```
+
+Positional arguments:
+
+* `dataset_path` — path to the split TSV
+* `helper_files_dir` — path to the helper-data directory
+* `logs_path` — directory for TensorBoard logs and checkpoints
+
+Common optional arguments:
+
+* `--skip_test`, `--df_test_path`, `--bonus_challenge`
+* `--bin_width`, `--batch_size`, `--devices`, `--precision`
+* `--layer_dim`, `--n_layers`, `--dropout`, `--lr`
+* `--bitwise_loss`, `--fpwise_loss`, `--rankwise_loss`
+* `--checkpoint_path`, `--freeze_checkpoint`
 
 Place trained checkpoints in `checkpoints/`.
 
 ---
 
-## 4. Marginal Conformal Prediction (MCP)
+## 5. Running MCP
 
 Three nonconformity scores are implemented in `ms_cp/mcp/scores/`: **LAC**, **APS**, and **RAPS**.
 
-### Running MCP
+Main entry point:
 
 ```bash
 python -m ms_cp.mcp.main \
@@ -121,6 +165,8 @@ python -m ms_cp.mcp.main \
   --device       cuda
 ```
 
+Required arguments:
+
 | Flag | Description |
 |------|-------------|
 | `--dataset_tsv` | Path to a scenario-specific TSV split |
@@ -130,18 +176,30 @@ python -m ms_cp.mcp.main \
 | `--alpha` | Miscoverage level (e.g., `0.1` for 90% target coverage) |
 | `--output_dir` | Directory to save results |
 
-RAPS-specific options: `--tune_n`, `--lambda_grid`, `--randomized`, `--allow_zero_sets`.
+Common optional arguments:
 
-Outputs are saved to `--output_dir`: `per_sample.csv`, `summary.json`, `summary.txt`, `calibration.json`, and `config.json`.
+* `--batch_size`, `--num_workers`, `--device`, `--seed`
+* `--max_mz`, `--bin_width`, `--fp_size`
+
+RAPS-specific optional arguments:
+
+* `--tune_n`, `--lambda_grid`, `--randomized`, `--allow_zero_sets`
+
+### MCP outputs
+
+Each MCP run writes results to `--output_dir`:
+
+* `config.json` — run configuration
+* `calibration.json` — calibration state
+* `per_sample.csv` — per-sample results
+* `summary.json` and `summary.txt` — summary metrics
 
 ---
 
 ## Acknowledgements
 
-The retrieval model architecture is adapted from **[ms-mole](https://github.com/gdewael/ms-mole)** by De Waele et al.
+The model architecture and training code are adapted from **[ms-mole](https://github.com/gdewael/ms-mole)** by De Waele et al.
 This work builds on the **[MassSpecGym](https://github.com/pluskal-lab/MassSpecGym)** benchmark by Bushuiev et al.
-
----
 
 ---
 
