@@ -143,9 +143,6 @@ This work builds on the **[MassSpecGym](https://github.com/pluskal-lab/MassSpecG
 
 ---
 
-## Citation
-```
-
 ---
 
 ## License
