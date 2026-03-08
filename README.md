@@ -16,7 +16,6 @@ This repository contains code for:
 ms-cp/
 ├── README.md
 ├── requirements.txt
-├── environment.yml
 ├── .gitattributes
 ├── data/                  # MassSpecGym data, helper files, and generated split TSVs
 │   ├── MassSpecGym_S1.tsv
@@ -47,9 +46,8 @@ ms-cp/
 ├── examples/
 │   └── run_mcp.py
 ├── checkpoints/
-│   └── .gitkeep
-└── results/
     └── .gitkeep
+
 ```
 
 ---
